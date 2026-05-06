@@ -12,193 +12,171 @@ const client = new Client({
     ]
 });
 
-// === APIs ===
+// === الإعدادات الأساسية ===
 const GROQ_API = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_KEY = process.env.GROQ_API_KEY;
 
-// === Database ===
-const DB_FILE = './projects.json';
-let projects = fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : {};
+// === الذاكرة الدائمة (Brain) ===
+const DB_FILE = './brain.json';
+let brain = fs.existsSync(DB_FILE) ? JSON.parse(fs.readFileSync(DB_FILE)) : { projects: {}, lessons: [] };
 
-function saveDB() {
-    fs.writeFileSync(DB_FILE, JSON.stringify(projects, null, 2));
+function updateBrain(data) {
+    brain = { ...brain, ...data };
+    fs.writeFileSync(DB_FILE, JSON.stringify(brain, null, 2));
 }
 
-// === Slash Commands Definition ===
+// === تعريف الأوامر بالإنجليزية للسرعة (Slash Commands) ===
 const commands = [
     {
-        name: 'مشروع',
-        nameLocalizations: { 'en-US': 'project' },
-        description: 'ابدأ مشروع روبوت جديد من فكرتك',
-        options: [{
-            name: 'فكرة',
-            type: 3,
-            required: true,
-            description: 'صف فكرتك بالكامل'
-        }]
+        name: 'engineer',
+        description: 'Chat with the AI engineer to solve technical problems or debug code',
+        options: [{ name: 'query', type: 3, required: true, description: 'Describe your issue or ask a question' }]
     },
     {
-        name: 'help',
-        description: 'عرض قائمة المساعدة'
+        name: 'project',
+        description: 'Build a new robot project from scratch with physical analysis',
+        options: [{ name: 'idea', type: 3, required: true, description: 'Your robot idea' }]
+    },
+    {
+        name: 'upgrade',
+        description: 'Upgrade an existing project or swap components',
+        options: [
+            { name: 'id', type: 3, required: true, description: 'Project ID' },
+            { name: 'request', type: 3, required: true, description: 'What do you want to change or learn?' }
+        ]
     }
 ];
 
-// === Ready Event ===
+// === تشغيل البوت وتسجيل الأوامر ===
 client.once('ready', async () => {
-    console.log(`✅ Bot is online: ${client.user.tag}`);
+    console.log(`✅ Ai KSU is online as ${client.user.tag}`);
     try {
         await client.application.commands.set(commands);
-        console.log('✅ Commands registered');
-        client.user.setActivity('🤖 /مشروع لبناء الروبوتات', { type: 4 });
-    } catch (err) {
-        console.error(err);
-    }
+        console.log('✅ English commands registered successfully');
+        client.user.setActivity('🛠️ Engineering & AI', { type: 4 });
+    } catch (err) { console.error('Error registering commands:', err); }
 });
 
-// === Interaction Handler ===
+// === مستقبِل التفاعلات ===
 client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand()) {
-        if (interaction.commandName === 'مشروع') await handleProject(interaction);
+        const { commandName } = interaction;
+        if (commandName === 'engineer') await handleExpertChat(interaction);
+        else if (commandName === 'project') await handleComplexProject(interaction);
+        else if (commandName === 'upgrade') await handleUpgrade(interaction);
     }
     else if (interaction.isButton()) {
-        await handleButtons(interaction);
+        await handleProjectButtons(interaction);
     }
 });
 
-// === Project Handler ===
-async function handleProject(interaction) {
+// --- 1. وظيفة الـ Engineer (حل المشكلات والتعلم) ---
+async function handleExpertChat(interaction) {
     await interaction.deferReply();
-    const idea = interaction.options.getString('فكرة');
-    const projectId = `P${Date.now().toString(36).toUpperCase()}`;
+    const query = interaction.options.getString('query');
 
     try {
-        const analysis = await analyzeIdea(idea);
-        const components = await searchComponents(analysis.components);
-        const code = await generateCode(idea, components, analysis.pinout, analysis.algorithm);
+        const response = await axios.post(GROQ_API, {
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+                { role: 'system', content: `أنت كبير مهندسي الروبوتات والذكاء الاصطناعي. وظيفتك حل المشاكل التقنية وتطوير الأكواد لمجتمع الضاد. لديك خبرة في ${brain.lessons.length} مشكلة سابقة.` },
+                { role: 'user', content: query }
+            ],
+            temperature: 0.7
+        }, { headers: { 'Authorization': `Bearer ${GROQ_KEY}` } });
 
-        projects[projectId] = {
-            id: projectId, idea, analysis, components, code,
-            userId: interaction.user.id, createdAt: new Date().toISOString()
-        };
-        saveDB();
+        const answer = response.data.choices[0].message.content;
+
+        // حفظ الدرس في الذاكرة للتعلم المستمر
+        brain.lessons.push({ query, timestamp: new Date().toISOString() });
+        updateBrain({ lessons: brain.lessons });
+
+        await interaction.editReply(answer);
+    } catch (err) {
+        await interaction.editReply('❌ AI Engine timeout. Please try again.');
+    }
+}
+
+// --- 2. وظيفة الـ Project (تحليل فيزيائي وبرمجي) ---
+async function handleComplexProject(interaction) {
+    await interaction.deferReply();
+    const idea = interaction.options.getString('idea');
+    const pId = `PROJ-${Date.now().toString(36).toUpperCase()}`;
+
+    try {
+        const res = await axios.post(GROQ_API, {
+            model: 'llama-3.3-70b-versatile',
+            messages: [{
+                role: 'system',
+                content: `Analyze the robot idea and return ONLY JSON: {"name": "Project Name", "logic": "Algorithm in Arabic", "physics": "Physical laws used in Arabic", "components": [{"n": "Component", "p": "Pin"}], "code": "C++ Arduino code"}`
+            }, { role: 'user', content: idea }],
+            temperature: 0.3
+        }, { headers: { 'Authorization': `Bearer ${GROQ_KEY}` } });
+
+        const data = JSON.parse(res.data.choices[0].message.content.match(/\{[\s\S]*\}/)[0]);
+
+        // تخزين المشروع في الذاكرة الدائمة
+        brain.projects[pId] = data;
+        updateBrain({ projects: brain.projects });
 
         const embed = new EmbedBuilder()
-            .setTitle(`🔧 ${analysis.name} | ${projectId}`)
-            .setDescription(`**الوصف:**\n${analysis.description}`)
-            .setColor(0x00AE86)
-            .addFields(
-                { name: '📊 الصعوبة', value: analysis.difficulty, inline: true },
-                { name: '⚡ التوصيلات الأساسية', value: formatPinout(analysis.pinout), inline: true }
-            );
+            .setTitle(`🚀 ${data.name} | ${pId}`)
+            .setDescription(`**المنطق البرمجي:**\n${data.logic}\n\n**الأساس الفيزيائي:**\n${data.physics}`)
+            .setColor(0x00FF00)
+            .setFooter({ text: 'Ai KSU | Mujtama Al-Dhad' });
 
-        const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`code_${projectId}`).setLabel('📄 الكود').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(`sch_${projectId}`).setLabel('⚡ السكيماتيك').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId(`pcb_${projectId}`).setLabel('🔲 PCB').setStyle(ButtonStyle.Secondary)
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`code_${pId}`).setLabel('Get Code').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`wiring_${pId}`).setLabel('Wiring Map').setStyle(ButtonStyle.Success)
         );
 
-        const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`build_${projectId}`).setLabel('🔨 خطوات التجميع').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId(`datasheet_${projectId}`).setLabel('📚 داتا شيتس').setStyle(ButtonStyle.Secondary)
-        );
-
-        await interaction.editReply({
-            content: `✅ **تم تحليل فكرتك بنجاح يا ${interaction.user.username}!**`,
-            embeds: [embed],
-            components: [row1, row2]
-        });
-
+        await interaction.editReply({ embeds: [embed], components: [row] });
     } catch (err) {
         console.error(err);
-        await interaction.editReply('❌ فشل في معالجة الفكرة. تأكد من إعدادات الـ API.');
+        await interaction.editReply('❌ Failed to analyze the project idea.');
     }
 }
 
-// === Button Logic ===
-async function handleButtons(interaction) {
-    const [action, projectId] = interaction.customId.split('_');
-    const project = projects[projectId];
-    if (!project) return interaction.reply({ content: '❌ المشروع غير موجود.', ephemeral: true });
+// --- 3. وظيفة الـ Upgrade (تطوير وتغيير المكونات) ---
+async function handleUpgrade(interaction) {
+    await interaction.deferReply();
+    const id = interaction.options.getString('id');
+    const request = interaction.options.getString('request');
+    const oldProject = brain.projects[id];
 
-    switch (action) {
-        case 'code':
-            const attachment = new AttachmentBuilder(Buffer.from(project.code), { name: `code_${projectId}.ino` });
-            await interaction.reply({ content: `📄 **كود الأردوينو لمشروع ${projectId}:**`, files: [attachment], ephemeral: true });
-            break;
-        case 'sch':
-            const schText = generateSchematicText(project);
-            await interaction.reply({ content: `⚡ **السكيماتيك التوضيحي:**\n\`\`\`\n${schText}\n\`\`\``, ephemeral: true });
-            break;
-        case 'build':
-            const steps = generateBuildSteps(project);
-            await interaction.reply({ content: steps, ephemeral: true });
-            break;
-        case 'datasheet':
-            const links = project.components.map(c => `• **${c.name}**: [Datasheet](${c.datasheet})`).join('\n');
-            await interaction.reply({ content: `📚 **روابط الداتا شيتس:**\n${links}`, ephemeral: true });
-            break;
-        case 'pcb':
-            await interaction.reply({ content: `🔲 **ملف الـ Netlist لـ KiCad:**\n(قيد التطوير، استخدم السكيماتيك حالياً)`, ephemeral: true });
-            break;
+    if (!oldProject) return interaction.editReply('❌ Project ID not found in my brain.');
+
+    try {
+        const res = await axios.post(GROQ_API, {
+            model: 'llama-3.3-70b-versatile',
+            messages: [{
+                role: 'system',
+                content: `You are an upgrade engineer. Update this project: ${JSON.stringify(oldProject)} based on this user request: ${request}. Provide the new code and explain changes in Arabic.`
+            }],
+            temperature: 0.5
+        }, { headers: { 'Authorization': `Bearer ${GROQ_KEY}` } });
+
+        await interaction.editReply(`✅ **Upgrade for ${id} successful:**\n\n${res.data.choices[0].message.content.substring(0, 1900)}`);
+    } catch (err) {
+        await interaction.editReply('❌ Failed to process the upgrade.');
     }
 }
 
-// === AI Functions ===
-async function analyzeIdea(idea) {
-    const response = await axios.post(GROQ_API, {
-        model: 'llama-3.3-70b-versatile',
-        messages: [{
-            role: 'system',
-            content: `You are a robotics expert. Return ONLY JSON: {"name": "English/Arabic Name", "description": "Arabic Desc", "difficulty": "Easy/Medium/Hard", "components": [{"name": "CompName", "type": "sensor"}], "pinout": {"Comp": "Pin"}, "algorithm": "Arabic steps"}`
-        }, { role: 'user', content: idea }],
-        temperature: 0.3
-    }, { headers: { 'Authorization': `Bearer ${GROQ_KEY}` } });
-    return JSON.parse(response.data.choices[0].message.content.match(/\{[\s\S]*\}/)[0]);
-}
+// --- معالجة الأزرار ---
+async function handleProjectButtons(interaction) {
+    const [action, id] = interaction.customId.split('_');
+    const p = brain.projects[id];
 
-async function generateCode(idea, components, pinout, algorithm) {
-    const response = await axios.post(GROQ_API, {
-        model: 'llama-3.3-70b-versatile',
-        messages: [{
-            role: 'system',
-            content: `Write Arduino code for this project with Arabic comments. Return ONLY code.`
-        }, { role: 'user', content: `Idea: ${idea}, Pinout: ${JSON.stringify(pinout)}` }],
-        temperature: 0.2
-    }, { headers: { 'Authorization': `Bearer ${GROQ_KEY}` } });
-    return response.data.choices[0].message.content;
-}
+    if (!p) return interaction.reply({ content: '❌ Project data expired.', ephemeral: true });
 
-// === Helper Functions ===
-function formatPinout(pinout) {
-    return Object.entries(pinout).map(([k, v]) => `• ${k} → ${v}`).join('\n');
-}
-
-function generateSchematicText(project) {
-    let sch = '      [ARDUINO UNO]\n           │\n';
-    Object.entries(project.analysis.pinout).forEach(([comp, pin]) => {
-        sch += `   [${comp}] <───> (${pin})\n`;
-    });
-    sch += '           │\n         [GND]';
-    return sch;
-}
-
-function generateBuildSteps(project) {
-    let steps = `🔨 **خطوات بناء مشروع ${project.analysis.name}:**\n\n`;
-    steps += `1. أحضر لوحة تجارب (Breadboard) وأسلاك توصيل.\n`;
-    Object.entries(project.analysis.pinout).forEach(([comp, pin], i) => {
-        steps += `${i + 2}. قم بتوصيل طرف الإشارة لـ **${comp}** بالمنفذ **${pin}** في الأردوينو.\n`;
-    });
-    steps += `${Object.keys(project.analysis.pinout).length + 2}. تأكد من توصيل كافة الأطراف السالبة بـ GND.\n`;
-    steps += `\n✅ **مبروك!** ارفع الكود الآن وابدأ التجربة.`;
-    return steps;
-}
-
-async function searchComponents(list) {
-    return list.map(c => ({
-        name: c.name,
-        datasheet: `https://www.google.com/search?q=${encodeURIComponent(c.name)}+datasheet+pdf`,
-        url: `https://www.amazon.com/s?k=${encodeURIComponent(c.name)}`
-    }));
+    if (action === 'code') {
+        const file = new AttachmentBuilder(Buffer.from(p.code), { name: `control_${id}.ino` });
+        await interaction.reply({ content: '📄 **Arduino Code:**', files: [file], ephemeral: true });
+    } else if (action === 'wiring') {
+        let map = `⚡ **Wiring for ${p.name}:**\n`;
+        p.components.forEach(c => map += `• ${c.n} ──> Pin ${c.p}\n`);
+        await interaction.reply({ content: map, ephemeral: true });
+    }
 }
 
 client.login(process.env.DISCORD_TOKEN);
