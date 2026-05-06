@@ -741,7 +741,7 @@ async function sendDatasheets(interaction, project) {
 // === AI Functions ===
 async function analyzeIdea(idea) {
     const response = await axios.post(GROQ_API, {
-        model: 'deepseek-coder-33b',
+        model: 'llama3-70b-8192',
         messages: [{
             role: 'system',
             content: `You are an expert robotics engineer. Analyze the project idea and return ONLY a JSON object with this structure:
@@ -836,7 +836,7 @@ function getEstimatedPrice(name) {
 
 async function generateCode(idea, components, pinout, algorithm) {
     const response = await axios.post(GROQ_API, {
-        model: 'deepseek-coder-33b',
+        model: 'llama3-70b-8192',
         messages: [{
             role: 'system',
             content: `You are an expert Arduino/embedded systems programmer. Write complete, working code with:
@@ -861,7 +861,7 @@ async function generateCode(idea, components, pinout, algorithm) {
 
 async function upgradeProject(project, feature) {
     const response = await axios.post(GROQ_API, {
-        model: 'deepseek-coder-33b',
+        model: 'llama3-70b-8192',
         messages: [{
             role: 'system',
             content: `You are a robotics upgrade specialist. Upgrade the project by adding the requested feature. Return ONLY a JSON object:
